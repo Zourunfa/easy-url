@@ -21,7 +21,7 @@ chrome.tabs.query({ active: true, currentWindow: true }, tabs => {
 
   currentParamObj.value = getUrlParams(currentUrl.value as string)
 
-  console.log(currentParamObj.value, '-----')
+  // console.log(currentParamObj.value, '-----')
 })
 
 function openOptionsPage() {
