@@ -80,6 +80,7 @@
     "element-plus": "^2.8.3",
     "vue-json-editor": "^1.4.3",
     "vue3-json-editor": "^1.1.5",
-    "vue3-json-viewer": "^2.2.2"
+    "vue3-json-viewer": "^2.2.2",
+    "vue3-ts-jsoneditor": "^2.11.2"
   }
 }
