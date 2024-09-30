@@ -69,7 +69,7 @@ const handleReplaceUrl = () => {
     <div class="text-center w-90% p-4">
       <textarea v-model="currentUrl" class="w-full h-36 resize-none p-2 border border-gray-300 rounded-md bg-white text-gray-700 focus:outline-none focus:border-blue-500"> </textarea>
       <textarea v-model="currentOpenxHeader" class="w-full h-24 resize-none p-2 border border-gray-300 rounded-md bg-white text-gray-700 focus:outline-none focus:border-blue-500" />
-      <json-editor height="400" mode="tree" :queryLanguagesIds="queryLanguages" @change="handleJsonChange" v-model:json="currentOpenxHeaderObj" />
+      <json-editor height="500" mode="tree" :queryLanguagesIds="queryLanguages" @change="handleJsonChange" v-model:json="currentOpenxHeaderObj" />
       <div class="flex justify-center gap-4">
         <button class="btn mt-2" @click="handleReplaceUrl">刷新当前url</button>
         <button class="btn mt-2" @click="handleSkipNewTab">用新url跳转新TAB</button>
