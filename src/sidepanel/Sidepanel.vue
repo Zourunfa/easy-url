@@ -284,6 +284,24 @@ function copyToClipboard(text: string) {
     }, 2000)
   })
 }
+
+function openInNewTab(url: string) {
+  if (url && url !== '(无iframe)') {
+    browser.tabs.create({ url })
+    toastMessage.value = '已在新标签页打开'
+    showToast.value = true
+    setTimeout(() => {
+      showToast.value = false
+    }, 2000)
+  }
+  else {
+    toastMessage.value = '无效的URL'
+    showToast.value = true
+    setTimeout(() => {
+      showToast.value = false
+    }, 2000)
+  }
+}
 </script>
 
 <template>
@@ -354,6 +372,12 @@ function copyToClipboard(text: string) {
                 @click="copyToClipboard(tab.iframeUrl)"
               >
                 复制
+              </button>
+              <button
+                class="text-xs text-green-600 hover:text-green-800"
+                @click="openInNewTab(tab.iframeUrl)"
+              >
+                跳转
               </button>
             </div>
             <div class="p-2 bg-gray-50 rounded text-xs text-left break-all font-mono text-gray-700">
