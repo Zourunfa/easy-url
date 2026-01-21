@@ -6,3 +6,8 @@ declare module '*.vue' {
   const component: any
   export default component
 }
+
+declare module 'my-json-editor' {
+  const JsonEditor: any
+  export default JsonEditor
+}

@@ -13,6 +13,20 @@ import { setupApp } from '~/logic/common-setup'
     console.log(`[vitesse-webext] Navigate from page "${data.title}"`)
   })
 
+  // 监听来自sidepanel的消息请求
+  browser.runtime.onMessage.addListener((request, sender, sendResponse) => {
+    if (request.action === 'getHTML') {
+      try {
+        const html = document.documentElement.outerHTML
+        sendResponse({ html })
+      }
+      catch (error) {
+        sendResponse({ error: error.message })
+      }
+      return true // 保持消息通道开启
+    }
+  })
+
   // mount component to context window
   const container = document.createElement('div')
   container.id = __NAME__
