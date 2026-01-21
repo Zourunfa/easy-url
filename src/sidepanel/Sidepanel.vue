@@ -55,6 +55,28 @@ browser.tabs.query({ active: true, currentWindow: true }).then((tabs) => {
     : undefined
 })
 
+function refreshLocalData() {
+  browser.tabs.query({ active: true, currentWindow: true }).then((tabs) => {
+    const currentTab = tabs[0]
+    currentUrl.value = currentTab.url
+
+    const params = getUrlParams(currentUrl.value as string)
+    Object.assign(currentParamObj, params)
+
+    currentOpenxHeader.value = (params as any)._openx_header || ''
+
+    currentOpenxHeaderObj.value = currentOpenxHeader.value
+      ? JSON.parse(Base62x.decode(currentOpenxHeader.value))
+      : undefined
+
+    toastMessage.value = '已刷新当前页面数据'
+    showToast.value = true
+    setTimeout(() => {
+      showToast.value = false
+    }, 2000)
+  })
+}
+
 function changeURLArg(url: string, arg: string, arg_val: string) {
   const pattern = `${arg}=([^&]*)`
   const replaceText = `${arg}=${arg_val}`
@@ -347,7 +369,19 @@ function copyToClipboard(text: string) {
     </div>
 
     <!-- Local模式内容 -->
-    <div v-show="activeTab === 'local'" class="text-center w-90% p-4">
+    <div v-show="activeTab === 'local'" class="p-4">
+      <div class="mb-4 flex justify-between items-center">
+        <h2 class="text-lg font-semibold text-gray-800">
+          URL参数编辑
+        </h2>
+        <button
+          class="btn"
+          @click="refreshLocalData"
+        >
+          刷新
+        </button>
+      </div>
+
       <textarea
         v-model="currentUrl"
         class="w-full h-36 resize-none p-2 border border-gray-300 rounded-md bg-white text-gray-700 focus:outline-none focus:border-blue-500"
