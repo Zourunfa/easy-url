@@ -1,9 +1,16 @@
 <script setup lang="ts">
+/**
+ *    <div v-if="debugInfo" class="p-4 mb-4 bg-blue-50 border border-blue-200 rounded-md">
+        <p class="text-blue-600 text-xs font-mono whitespace-pre-wrap">
+          {{ debugInfo }}
+        </p>
+      </div>
+ */
 import Base62x from '@pluve/base62'
 import JsonEditor from 'my-json-editor'
 import browser from 'webextension-polyfill'
 
-const activeTab = ref('local')
+const activeTab = ref('portal')
 const currentUrl = ref<string | undefined>('')
 const currentParamObj = reactive<Record<string, string>>({})
 const currentOpenxHeader = ref('')
@@ -20,6 +27,8 @@ const portalTabs = ref<PortalTab[]>([])
 const isLoadingPortal = ref(false)
 const portalError = ref('')
 const debugInfo = ref('')
+const showToast = ref(false)
+const toastMessage = ref('')
 
 function getUrlParams(url: string) {
   const params = new URLSearchParams(url.split('?')[1])
@@ -170,6 +179,12 @@ async function loadPortalTabs() {
 
     tabElements.forEach((tabEl) => {
       const id = tabEl.getAttribute('id')?.replace('tab-', '') || ''
+
+      // 跳过home tab
+      if (id === 'home') {
+        return
+      }
+
       let name = tabEl.textContent?.trim() || '未命名'
 
       // 移除关闭按钮的文本（如果有）
@@ -225,8 +240,27 @@ watch(activeTab, (newTab) => {
   }
 })
 
+// 组件挂载时自动加载Portal数据
+onMounted(() => {
+  if (activeTab.value === 'portal') {
+    loadPortalTabs()
+  }
+})
+
 function copyToClipboard(text: string) {
-  navigator.clipboard.writeText(text)
+  navigator.clipboard.writeText(text).then(() => {
+    toastMessage.value = '复制成功！'
+    showToast.value = true
+    setTimeout(() => {
+      showToast.value = false
+    }, 2000)
+  }).catch(() => {
+    toastMessage.value = '复制失败'
+    showToast.value = true
+    setTimeout(() => {
+      showToast.value = false
+    }, 2000)
+  })
 }
 </script>
 
@@ -236,43 +270,18 @@ function copyToClipboard(text: string) {
     <div class="flex border-b border-gray-300">
       <button
         class="px-6 py-3 font-medium transition-colors"
-        :class="activeTab === 'local' ? 'border-b-2 border-blue-500 text-blue-600' : 'text-gray-600 hover:text-gray-800'"
-        @click="activeTab = 'local'"
-      >
-        Local模式
-      </button>
-      <button
-        class="px-6 py-3 font-medium transition-colors"
         :class="activeTab === 'portal' ? 'border-b-2 border-blue-500 text-blue-600' : 'text-gray-600 hover:text-gray-800'"
         @click="activeTab = 'portal'"
       >
         Portal模式
       </button>
-    </div>
-
-    <!-- Local模式内容 -->
-    <div v-show="activeTab === 'local'" class="text-center w-90% p-4">
-      <textarea
-        v-model="currentUrl"
-        class="w-full h-36 resize-none p-2 border border-gray-300 rounded-md bg-white text-gray-700 focus:outline-none focus:border-blue-500"
-      />
-      <textarea
-        v-model="currentOpenxHeader"
-        class="w-full h-24 resize-none p-2 border border-gray-300 rounded-md bg-white text-gray-700 focus:outline-none focus:border-blue-500"
-      />
-      <JsonEditor
-        v-model="currentOpenxHeaderObj"
-        style="height: 700px"
-        @change="handleJsonChange"
-      />
-      <div class="flex justify-center gap-4">
-        <button class="btn mt-2" @click="handleReplaceUrl">
-          刷新当前url
-        </button>
-        <button class="btn mt-2" @click="handleSkipNewTab">
-          用新url跳转新TAB
-        </button>
-      </div>
+      <button
+        class="px-6 py-3 font-medium transition-colors"
+        :class="activeTab === 'local' ? 'border-b-2 border-blue-500 text-blue-600' : 'text-gray-600 hover:text-gray-800'"
+        @click="activeTab = 'local'"
+      >
+        Local模式
+      </button>
     </div>
 
     <!-- Portal模式内容 -->
@@ -293,12 +302,6 @@ function copyToClipboard(text: string) {
       <div v-if="portalError" class="p-4 mb-4 bg-red-50 border border-red-200 rounded-md">
         <p class="text-red-600 text-sm font-medium">
           {{ portalError }}
-        </p>
-      </div>
-
-      <div v-if="debugInfo" class="p-4 mb-4 bg-blue-50 border border-blue-200 rounded-md">
-        <p class="text-blue-600 text-xs font-mono whitespace-pre-wrap">
-          {{ debugInfo }}
         </p>
       </div>
 
@@ -342,5 +345,47 @@ function copyToClipboard(text: string) {
         点击"刷新"按钮加载Portal页面的Tab信息
       </div>
     </div>
+
+    <!-- Local模式内容 -->
+    <div v-show="activeTab === 'local'" class="text-center w-90% p-4">
+      <textarea
+        v-model="currentUrl"
+        class="w-full h-36 resize-none p-2 border border-gray-300 rounded-md bg-white text-gray-700 focus:outline-none focus:border-blue-500"
+      />
+      <textarea
+        v-model="currentOpenxHeader"
+        class="w-full h-24 resize-none p-2 border border-gray-300 rounded-md bg-white text-gray-700 focus:outline-none focus:border-blue-500"
+      />
+      <JsonEditor
+        v-model="currentOpenxHeaderObj"
+        style="height: 700px"
+        @change="handleJsonChange"
+      />
+      <div class="flex justify-center gap-4">
+        <button class="btn mt-2" @click="handleReplaceUrl">
+          刷新当前url
+        </button>
+        <button class="btn mt-2" @click="handleSkipNewTab">
+          用新url跳转新TAB
+        </button>
+      </div>
+    </div>
+
+    <!-- Toast提示 -->
+    <transition
+      enter-active-class="transition ease-out duration-300"
+      enter-from-class="opacity-0 -translate-y-2"
+      enter-to-class="opacity-100 translate-y-0"
+      leave-active-class="transition ease-in duration-200"
+      leave-from-class="opacity-100 translate-y-0"
+      leave-to-class="opacity-0 -translate-y-2"
+    >
+      <div
+        v-if="showToast"
+        class="fixed top-4 left-1/2 transform -translate-x-1/2 bg-gray-800 text-white px-4 py-2 rounded-lg shadow-lg z-50"
+      >
+        {{ toastMessage }}
+      </div>
+    </transition>
   </main>
 </template>
