@@ -21,6 +21,8 @@ interface PortalTab {
   id: string
   name: string
   iframeUrl: string
+  openxHeader?: string
+  token?: string
 }
 
 const portalTabs = ref<PortalTab[]>([])
@@ -232,10 +234,23 @@ async function loadPortalTabs() {
       }
 
       // 添加到列表（显示iframe地址或"无iframe"）
+      const iframeUrl = iframe?.src || '(无iframe)'
+
+      // 提取URL参数
+      let openxHeader = ''
+      let token = ''
+      if (iframe?.src) {
+        const params = getUrlParams(iframe.src)
+        openxHeader = (params as any)._openx_header || ''
+        token = (params as any).token || ''
+      }
+
       parsedTabs.push({
         id,
         name,
-        iframeUrl: iframe?.src || '(无iframe)',
+        iframeUrl,
+        openxHeader,
+        token,
       })
     })
 
@@ -296,6 +311,47 @@ function openInNewTab(url: string) {
   }
   else {
     toastMessage.value = '无效的URL'
+    showToast.value = true
+    setTimeout(() => {
+      showToast.value = false
+    }, 2000)
+  }
+}
+
+function extractOpenxHeader(url: string) {
+  if (!url || url === '(无iframe)') {
+    toastMessage.value = '无效的URL'
+    showToast.value = true
+    setTimeout(() => {
+      showToast.value = false
+    }, 2000)
+    return
+  }
+
+  try {
+    const params = getUrlParams(url)
+    const openxHeader = (params as any)._openx_header
+
+    if (!openxHeader) {
+      toastMessage.value = '该URL中没有_openx_header参数'
+      showToast.value = true
+      setTimeout(() => {
+        showToast.value = false
+      }, 2000)
+      return
+    }
+
+    // 解码并复制到剪贴板
+    const decoded = Base62x.decode(openxHeader)
+    copyToClipboard(decoded)
+    toastMessage.value = '已提取并复制_openx_header参数'
+    showToast.value = true
+    setTimeout(() => {
+      showToast.value = false
+    }, 2000)
+  }
+  catch (error) {
+    toastMessage.value = '提取失败，参数格式可能有误'
     showToast.value = true
     setTimeout(() => {
       showToast.value = false
@@ -364,24 +420,66 @@ function openInNewTab(url: string) {
               ID: {{ tab.id }}
             </span>
           </div>
-          <div class="mt-2">
-            <div class="flex items-center gap-2 mb-1">
-              <span class="text-sm font-medium text-gray-600">iframe地址:</span>
-              <button
-                class="text-xs text-blue-600 hover:text-blue-800"
-                @click="copyToClipboard(tab.iframeUrl)"
-              >
-                复制
-              </button>
-              <button
-                class="text-xs text-green-600 hover:text-green-800"
-                @click="openInNewTab(tab.iframeUrl)"
-              >
-                跳转
-              </button>
+
+          <!-- 左右布局 -->
+          <div class="grid grid-cols-2 gap-4 mt-2">
+            <!-- 左侧：iframe地址 -->
+            <div>
+              <div class="flex items-center gap-2 mb-1">
+                <span class="text-sm font-medium text-gray-600">iframe地址:</span>
+                <button
+                  class="text-xs text-blue-600 hover:text-blue-800"
+                  @click="copyToClipboard(tab.iframeUrl)"
+                >
+                  复制
+                </button>
+                <button
+                  class="text-xs text-green-600 hover:text-green-800"
+                  @click="openInNewTab(tab.iframeUrl)"
+                >
+                  跳转
+                </button>
+              </div>
+              <div class="p-2 bg-gray-50 rounded text-xs text-left break-all font-mono text-gray-700">
+                {{ tab.iframeUrl }}
+              </div>
             </div>
-            <div class="p-2 bg-gray-50 rounded text-xs text-left break-all font-mono text-gray-700">
-              {{ tab.iframeUrl }}
+
+            <!-- 右侧：参数展示 -->
+            <div class="space-y-3">
+              <!-- openx_header参数 -->
+              <div>
+                <div class="flex items-center gap-2 mb-1">
+                  <span class="text-sm font-medium text-gray-600">_openx_header:</span>
+                  <button
+                    v-if="tab.openxHeader"
+                    class="text-xs text-blue-600 hover:text-blue-800"
+                    @click="copyToClipboard(tab.openxHeader)"
+                  >
+                    复制
+                  </button>
+                </div>
+                <div class="p-2 bg-purple-50 rounded text-xs text-left break-all font-mono text-gray-700 max-h-40 overflow-y-auto">
+                  {{ tab.openxHeader || '(无)' }}
+                </div>
+              </div>
+
+              <!-- token参数 -->
+              <div>
+                <div class="flex items-center gap-2 mb-1">
+                  <span class="text-sm font-medium text-gray-600">token:</span>
+                  <button
+                    v-if="tab.token"
+                    class="text-xs text-blue-600 hover:text-blue-800"
+                    @click="copyToClipboard(tab.token)"
+                  >
+                    复制
+                  </button>
+                </div>
+                <div class="p-2 bg-green-50 rounded text-xs text-left break-all font-mono text-gray-700 max-h-40 overflow-y-auto">
+                  {{ tab.token || '(无)' }}
+                </div>
+              </div>
             </div>
           </div>
         </div>
