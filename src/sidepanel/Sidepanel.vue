@@ -1,9 +1,16 @@
 <script setup lang="ts">
+/**
+ *    <div v-if="debugInfo" class="p-4 mb-4 bg-blue-50 border border-blue-200 rounded-md">
+        <p class="text-blue-600 text-xs font-mono whitespace-pre-wrap">
+          {{ debugInfo }}
+        </p>
+      </div>
+ */
 import Base62x from '@pluve/base62'
 import JsonEditor from 'my-json-editor'
 import browser from 'webextension-polyfill'
 
-const activeTab = ref('local')
+const activeTab = ref('portal')
 const currentUrl = ref<string | undefined>('')
 const currentParamObj = reactive<Record<string, string>>({})
 const currentOpenxHeader = ref('')
@@ -14,12 +21,16 @@ interface PortalTab {
   id: string
   name: string
   iframeUrl: string
+  openxHeader?: string
+  token?: string
 }
 
 const portalTabs = ref<PortalTab[]>([])
 const isLoadingPortal = ref(false)
 const portalError = ref('')
 const debugInfo = ref('')
+const showToast = ref(false)
+const toastMessage = ref('')
 
 function getUrlParams(url: string) {
   const params = new URLSearchParams(url.split('?')[1])
@@ -45,6 +56,28 @@ browser.tabs.query({ active: true, currentWindow: true }).then((tabs) => {
     ? JSON.parse(Base62x.decode(currentOpenxHeader.value))
     : undefined
 })
+
+function refreshLocalData() {
+  browser.tabs.query({ active: true, currentWindow: true }).then((tabs) => {
+    const currentTab = tabs[0]
+    currentUrl.value = currentTab.url
+
+    const params = getUrlParams(currentUrl.value as string)
+    Object.assign(currentParamObj, params)
+
+    currentOpenxHeader.value = (params as any)._openx_header || ''
+
+    currentOpenxHeaderObj.value = currentOpenxHeader.value
+      ? JSON.parse(Base62x.decode(currentOpenxHeader.value))
+      : undefined
+
+    toastMessage.value = '已刷新当前页面数据'
+    showToast.value = true
+    setTimeout(() => {
+      showToast.value = false
+    }, 2000)
+  })
+}
 
 function changeURLArg(url: string, arg: string, arg_val: string) {
   const pattern = `${arg}=([^&]*)`
@@ -170,6 +203,12 @@ async function loadPortalTabs() {
 
     tabElements.forEach((tabEl) => {
       const id = tabEl.getAttribute('id')?.replace('tab-', '') || ''
+
+      // 跳过home tab
+      if (id === 'home') {
+        return
+      }
+
       let name = tabEl.textContent?.trim() || '未命名'
 
       // 移除关闭按钮的文本（如果有）
@@ -195,10 +234,23 @@ async function loadPortalTabs() {
       }
 
       // 添加到列表（显示iframe地址或"无iframe"）
+      const iframeUrl = iframe?.src || '(无iframe)'
+
+      // 提取URL参数
+      let openxHeader = ''
+      let token = ''
+      if (iframe?.src) {
+        const params = getUrlParams(iframe.src)
+        openxHeader = (params as any)._openx_header || ''
+        token = (params as any).token || ''
+      }
+
       parsedTabs.push({
         id,
         name,
-        iframeUrl: iframe?.src || '(无iframe)',
+        iframeUrl,
+        openxHeader,
+        token,
       })
     })
 
@@ -225,8 +277,86 @@ watch(activeTab, (newTab) => {
   }
 })
 
+// 组件挂载时自动加载Portal数据
+onMounted(() => {
+  if (activeTab.value === 'portal') {
+    loadPortalTabs()
+  }
+})
+
 function copyToClipboard(text: string) {
-  navigator.clipboard.writeText(text)
+  navigator.clipboard.writeText(text).then(() => {
+    toastMessage.value = '复制成功！'
+    showToast.value = true
+    setTimeout(() => {
+      showToast.value = false
+    }, 2000)
+  }).catch(() => {
+    toastMessage.value = '复制失败'
+    showToast.value = true
+    setTimeout(() => {
+      showToast.value = false
+    }, 2000)
+  })
+}
+
+function openInNewTab(url: string) {
+  if (url && url !== '(无iframe)') {
+    browser.tabs.create({ url })
+    toastMessage.value = '已在新标签页打开'
+    showToast.value = true
+    setTimeout(() => {
+      showToast.value = false
+    }, 2000)
+  }
+  else {
+    toastMessage.value = '无效的URL'
+    showToast.value = true
+    setTimeout(() => {
+      showToast.value = false
+    }, 2000)
+  }
+}
+
+function extractOpenxHeader(url: string) {
+  if (!url || url === '(无iframe)') {
+    toastMessage.value = '无效的URL'
+    showToast.value = true
+    setTimeout(() => {
+      showToast.value = false
+    }, 2000)
+    return
+  }
+
+  try {
+    const params = getUrlParams(url)
+    const openxHeader = (params as any)._openx_header
+
+    if (!openxHeader) {
+      toastMessage.value = '该URL中没有_openx_header参数'
+      showToast.value = true
+      setTimeout(() => {
+        showToast.value = false
+      }, 2000)
+      return
+    }
+
+    // 解码并复制到剪贴板
+    const decoded = Base62x.decode(openxHeader)
+    copyToClipboard(decoded)
+    toastMessage.value = '已提取并复制_openx_header参数'
+    showToast.value = true
+    setTimeout(() => {
+      showToast.value = false
+    }, 2000)
+  }
+  catch (error) {
+    toastMessage.value = '提取失败，参数格式可能有误'
+    showToast.value = true
+    setTimeout(() => {
+      showToast.value = false
+    }, 2000)
+  }
 }
 </script>
 
@@ -236,43 +366,18 @@ function copyToClipboard(text: string) {
     <div class="flex border-b border-gray-300">
       <button
         class="px-6 py-3 font-medium transition-colors"
-        :class="activeTab === 'local' ? 'border-b-2 border-blue-500 text-blue-600' : 'text-gray-600 hover:text-gray-800'"
-        @click="activeTab = 'local'"
-      >
-        Local模式
-      </button>
-      <button
-        class="px-6 py-3 font-medium transition-colors"
         :class="activeTab === 'portal' ? 'border-b-2 border-blue-500 text-blue-600' : 'text-gray-600 hover:text-gray-800'"
         @click="activeTab = 'portal'"
       >
         Portal模式
       </button>
-    </div>
-
-    <!-- Local模式内容 -->
-    <div v-show="activeTab === 'local'" class="text-center w-90% p-4">
-      <textarea
-        v-model="currentUrl"
-        class="w-full h-36 resize-none p-2 border border-gray-300 rounded-md bg-white text-gray-700 focus:outline-none focus:border-blue-500"
-      />
-      <textarea
-        v-model="currentOpenxHeader"
-        class="w-full h-24 resize-none p-2 border border-gray-300 rounded-md bg-white text-gray-700 focus:outline-none focus:border-blue-500"
-      />
-      <JsonEditor
-        v-model="currentOpenxHeaderObj"
-        style="height: 700px"
-        @change="handleJsonChange"
-      />
-      <div class="flex justify-center gap-4">
-        <button class="btn mt-2" @click="handleReplaceUrl">
-          刷新当前url
-        </button>
-        <button class="btn mt-2" @click="handleSkipNewTab">
-          用新url跳转新TAB
-        </button>
-      </div>
+      <button
+        class="px-6 py-3 font-medium transition-colors"
+        :class="activeTab === 'local' ? 'border-b-2 border-blue-500 text-blue-600' : 'text-gray-600 hover:text-gray-800'"
+        @click="activeTab = 'local'"
+      >
+        Local模式
+      </button>
     </div>
 
     <!-- Portal模式内容 -->
@@ -296,12 +401,6 @@ function copyToClipboard(text: string) {
         </p>
       </div>
 
-      <div v-if="debugInfo" class="p-4 mb-4 bg-blue-50 border border-blue-200 rounded-md">
-        <p class="text-blue-600 text-xs font-mono whitespace-pre-wrap">
-          {{ debugInfo }}
-        </p>
-      </div>
-
       <div v-if="portalTabs.length > 0" class="space-y-4">
         <div
           v-for="(tab, index) in portalTabs"
@@ -321,18 +420,66 @@ function copyToClipboard(text: string) {
               ID: {{ tab.id }}
             </span>
           </div>
-          <div class="mt-2">
-            <div class="flex items-center gap-2 mb-1">
-              <span class="text-sm font-medium text-gray-600">iframe地址:</span>
-              <button
-                class="text-xs text-blue-600 hover:text-blue-800"
-                @click="copyToClipboard(tab.iframeUrl)"
-              >
-                复制
-              </button>
+
+          <!-- 左右布局 -->
+          <div class="grid grid-cols-2 gap-4 mt-2">
+            <!-- 左侧：iframe地址 -->
+            <div>
+              <div class="flex items-center gap-2 mb-1">
+                <span class="text-sm font-medium text-gray-600">iframe地址:</span>
+                <button
+                  class="text-xs text-blue-600 hover:text-blue-800"
+                  @click="copyToClipboard(tab.iframeUrl)"
+                >
+                  复制
+                </button>
+                <button
+                  class="text-xs text-green-600 hover:text-green-800"
+                  @click="openInNewTab(tab.iframeUrl)"
+                >
+                  跳转
+                </button>
+              </div>
+              <div class="p-2 bg-gray-50 rounded text-xs text-left break-all font-mono text-gray-700">
+                {{ tab.iframeUrl }}
+              </div>
             </div>
-            <div class="p-2 bg-gray-50 rounded text-xs text-left break-all font-mono text-gray-700">
-              {{ tab.iframeUrl }}
+
+            <!-- 右侧：参数展示 -->
+            <div class="space-y-3">
+              <!-- openx_header参数 -->
+              <div>
+                <div class="flex items-center gap-2 mb-1">
+                  <span class="text-sm font-medium text-gray-600">_openx_header:</span>
+                  <button
+                    v-if="tab.openxHeader"
+                    class="text-xs text-blue-600 hover:text-blue-800"
+                    @click="copyToClipboard(tab.openxHeader)"
+                  >
+                    复制
+                  </button>
+                </div>
+                <div class="p-2 bg-purple-50 rounded text-xs text-left break-all font-mono text-gray-700 max-h-40 overflow-y-auto">
+                  {{ tab.openxHeader || '(无)' }}
+                </div>
+              </div>
+
+              <!-- token参数 -->
+              <div>
+                <div class="flex items-center gap-2 mb-1">
+                  <span class="text-sm font-medium text-gray-600">token:</span>
+                  <button
+                    v-if="tab.token"
+                    class="text-xs text-blue-600 hover:text-blue-800"
+                    @click="copyToClipboard(tab.token)"
+                  >
+                    复制
+                  </button>
+                </div>
+                <div class="p-2 bg-green-50 rounded text-xs text-left break-all font-mono text-gray-700 max-h-40 overflow-y-auto">
+                  {{ tab.token || '(无)' }}
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -342,5 +489,59 @@ function copyToClipboard(text: string) {
         点击"刷新"按钮加载Portal页面的Tab信息
       </div>
     </div>
+
+    <!-- Local模式内容 -->
+    <div v-show="activeTab === 'local'" class="p-4">
+      <div class="mb-4 flex justify-between items-center">
+        <h2 class="text-lg font-semibold text-gray-800">
+          URL参数编辑
+        </h2>
+        <button
+          class="btn"
+          @click="refreshLocalData"
+        >
+          刷新
+        </button>
+      </div>
+
+      <textarea
+        v-model="currentUrl"
+        class="w-full h-36 resize-none p-2 border border-gray-300 rounded-md bg-white text-gray-700 focus:outline-none focus:border-blue-500"
+      />
+      <textarea
+        v-model="currentOpenxHeader"
+        class="w-full h-24 resize-none p-2 border border-gray-300 rounded-md bg-white text-gray-700 focus:outline-none focus:border-blue-500"
+      />
+      <JsonEditor
+        v-model="currentOpenxHeaderObj"
+        style="height: 700px"
+        @change="handleJsonChange"
+      />
+      <div class="flex justify-center gap-4">
+        <button class="btn mt-2" @click="handleReplaceUrl">
+          刷新当前url
+        </button>
+        <button class="btn mt-2" @click="handleSkipNewTab">
+          用新url跳转新TAB
+        </button>
+      </div>
+    </div>
+
+    <!-- Toast提示 -->
+    <transition
+      enter-active-class="transition ease-out duration-300"
+      enter-from-class="opacity-0 -translate-y-2"
+      enter-to-class="opacity-100 translate-y-0"
+      leave-active-class="transition ease-in duration-200"
+      leave-from-class="opacity-100 translate-y-0"
+      leave-to-class="opacity-0 -translate-y-2"
+    >
+      <div
+        v-if="showToast"
+        class="fixed top-4 left-1/2 transform -translate-x-1/2 bg-gray-800 text-white px-4 py-2 rounded-lg shadow-lg z-50"
+      >
+        {{ toastMessage }}
+      </div>
+    </transition>
   </main>
 </template>
